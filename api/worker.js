@@ -1,5 +1,3 @@
-import { Ai } from "@cloudflare/ai";
-
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
