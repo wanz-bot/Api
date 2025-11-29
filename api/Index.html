@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wanz AI – Login</title>
+<style>
+    body {
+        margin: 0;
+        font-family: "Inter", sans-serif;
+        background: #0f0f0f;
+        color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .card {
+        width: 95%;
+        max-width: 380px;
+        background: #151515;
+        padding: 30px;
+        border-radius: 18px;
+        box-shadow: 0 0 30px rgba(0,0,0,0.4);
+        animation: fade 0.5s ease forwards;
+    }
+
+    @keyframes fade {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 26px;
+        font-weight: 700;
+        background: linear-gradient(45deg, #00eaff, #0099ff);
+        -webkit-background-clip: text;
+        color: transparent;
+    }
+
+    input {
+        width: 100%;
+        padding: 12px;
+        margin-top: 10px;
+        border-radius: 10px;
+        border: none;
+        outline: none;
+        background: #202020;
+        color: #fff;
+        font-size: 15px;
+    }
+
+    button {
+        width: 100%;
+        margin-top: 20px;
+        padding: 12px;
+        background: linear-gradient(45deg, #00eaff, #0099ff);
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        color: #000;
+        transition: 0.3s;
+    }
+
+    button:hover {
+        opacity: 0.85;
+    }
+
+    .switch {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 14px;
+        cursor: pointer;
+        color: #00eaff;
+    }
+
+    .alert {
+        padding: 12px;
+        margin-top: 15px;
+        border-radius: 10px;
+        display: none;
+        font-size: 14px;
+    }
+
+    .error { background: #ff0033; }
+    .success { background: #00b36b; }
+</style>
+</head>
+<body>
+
+<div class="card">
+    <h2 id="title">Login</h2>
+
+    <div id="alerts"></div>
+
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+
+    <button onclick="submitForm()">Continue</button>
+
+    <div class="switch" onclick="toggleForm()">
+        Belum punya akun? Daftar sekarang
+    </div>
+</div>
+
+<script>
+let isLogin = true;
+
+function toggleForm() {
+    isLogin = !isLogin;
+    document.getElementById("title").innerText = isLogin ? "Login" : "Daftar";
+    document.querySelector(".switch").innerText = isLogin
+        ? "Belum punya akun? Daftar sekarang"
+        : "Sudah punya akun? Login";
+}
+
+function alertMsg(type, msg) {
+    let box = document.getElementById("alerts");
+    box.innerHTML = `<div class="alert ${type}">${msg}</div>`;
+    box.children[0].style.display = "block";
+}
+
+async function submitForm() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
+
+    if (!email || !password) return alertMsg("error", "Semua field harus diisi!");
+
+    const endpoint = isLogin ? "/login" : "/register";
+
+    const res = await fetch("https://api.unbanwa79.workers.dev" + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) return alertMsg("error", data.error || "Gagal");
+
+    alertMsg("success", isLogin ? "Login berhasil!" : "Akun berhasil dibuat!");
+
+    if (isLogin) {
+        // simpan ke localStorage untuk dashboard
+        localStorage.setItem("user", JSON.stringify(data.user));
+        setTimeout(() => {
+            window.location.href = "dashboard/dashboard.html";
+        }, 800);
+    }
+}
+</script>
+
+</body>
+  </html>
