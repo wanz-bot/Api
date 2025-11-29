@@ -1,410 +1,230 @@
+// =============================
+// CONFIG
+// =============================
+const TOKEN = "7950650582:AAG8-VcC-rYXdQfsgqVl3Hvq-ZKGDi5wK-c";
+const ADMIN_ID = 6837025112; // ganti dengan telegram admin ID
+const BOT_API = `https://api.telegram.org/bot${TOKEN}`;
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
-    const path = url.pathname;
 
-    // Serve UI
-    if (req.method === "GET") {
-      if (path === "/") return landingUI();
-      if (path === "/login") return loginUI();
-      if (path === "/register") return registerUI();
-      if (path === "/dashboard") return dashboardUI(req, env);
-    }
-
-    // API routes
-    if (path === "/api/register" && req.method === "POST") return register(req, env);
-    if (path === "/api/login" && req.method === "POST") return login(req, env);
-    if (path === "/api/reset-key" && req.method === "POST") return resetKey(req, env);
-    if (path === "/api/me" && req.method === "GET") return me(req, env);
-    if (path === "/api/ai" && req.method === "POST") return aiHandler(req, env);
+    // ROUTES
+    if (url.pathname === "/") return docPage();
+    if (url.pathname === "/api") return handleAPI(req, env, ctx);
+    if (url.pathname === "/admin") return adminPage(env);
+    if (url.pathname === "/telegram") return handleTelegram(req, env);
 
     return new Response("Not Found", { status: 404 });
   }
 };
 
-/* -------------------------------------------------------
-  UI TEMPLATES
-  Full modern glassmorphism + neon + animations
-------------------------------------------------------- */
+// =============================
+// API: AI MODEL
+// =============================
+async function handleAPI(req, env, ctx) {
+  const ip = req.headers.get("CF-Connecting-IP");
 
-function landingUI() {
+  // Check blocklist
+  const blocked = await env.KV_BLOCK.get(ip);
+  if (blocked) return json({ error: "Your IP is blocked" }, 403);
+
+  const body = await req.json().catch(() => null);
+  if (!body || !body.prompt)
+    return json({ error: "Missing prompt" }, 400);
+
+  const model = body.model || "llama-3.1-8b-instruct";
+
+  const ai = new Ai(env.AI);
+  const result = await ai.run(model, { prompt: body.prompt });
+
+  // Log activity
+  const log = {
+    ip,
+    model,
+    prompt: body.prompt.substring(0, 150),
+    time: Date.now()
+  };
+  await env.KV_LOG.put(`log:${Date.now()}`, JSON.stringify(log));
+
+  // Notify Telegram Admin
+  fetch(`${BOT_API}/sendMessage`, {
+    method: "POST",
+    body: JSON.stringify({
+      chat_id: ADMIN_ID,
+      text: `📌 *AI USED*\nIP: ${ip}\nModel: ${model}\nPrompt: ${body.prompt.substring(0, 100)}...`,
+      parse_mode: "Markdown"
+    })
+  });
+
+  return json(result);
+}
+
+// =============================
+// WEB — Documentation Page
+// =============================
+function docPage() {
   return html(`
-  <html>
-  <head>
-    <title>Wanz AI Platform</title>
-    <style>
-      body {
-        margin:0;
-        font-family: 'Inter', sans-serif;
-        background: linear-gradient(135deg, #0d0d0e, #14172b, #1b1e38);
-        color:white;
-        height:100vh;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        overflow:hidden;
-      }
-      .card {
-        padding:40px;
-        width:420px;
-        text-align:center;
-        border-radius:18px;
-        background:rgba(255,255,255,0.06);
-        box-shadow:0 0 35px rgba(0,0,0,0.4);
-        backdrop-filter:blur(15px);
-        animation:fade 1s ease;
-      }
-      .btn {
-        padding:12px 20px;
-        background:#5865F2;
-        border:none;
-        border-radius:10px;
-        font-weight:600;
-        cursor:pointer;
-        color:white;
-        margin-top:20px;
-        transition:.3s;
-      }
-      .btn:hover {
-        transform:scale(1.05);
-        background:#4654e0;
-      }
-      @keyframes fade {
-        from { opacity:0; transform:translateY(20px); }
-        to { opacity:1; transform:translateY(0); }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1>⚡ Wanz AI Platform</h1>
-      <p>Multi-Model AI API • Ultra Fast • Dashboard Futuristik</p>
-      <a href="/login"><button class="btn">Login</button></a>
-      <a href="/register"><button class="btn" style="margin-left:10px;background:#00c3ff">Register</button></a>
-    </div>
-  </body>
-  </html>
+    <h1>Wanz AI API</h1>
+    <p>Tanpa API key - Bebas pakai.</p>
+
+    <h2>Endpoint</h2>
+    <code>POST /api</code>
+
+    <h2>Request Body</h2>
+    <pre>{
+  "model": "llama-3.1-8b-instruct",
+  "prompt": "Halo AI"
+}</pre>
+
+    <h2>JavaScript Example</h2>
+    <pre>
+const res = await fetch("/api", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ prompt: "Halo" })
+});
+console.log(await res.json());
+    </pre>
+
+    <h2>PHP Example</h2>
+    <pre>
+$ch = curl_init("https://domain/api");
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(["prompt"=>"Halo"]));
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json"]);
+echo curl_exec($ch);
+    </pre>
+
+    <h2>cURL Example</h2>
+    <pre>
+curl -X POST https://domain/api \\
+ -H "Content-Type: application/json" \\
+ -d '{"prompt":"Halo"}'
+    </pre>
   `);
 }
 
-function loginUI() {
+// =============================
+// WEB — Admin Page
+// =============================
+async function adminPage(env) {
+  const logs = await env.KV_LOG.list({ prefix: "log:" });
+  let htmlRows = "";
+
+  for (const row of logs.keys) {
+    const item = JSON.parse(await env.KV_LOG.get(row.name));
+    htmlRows += `
+      <tr>
+        <td>${item.ip}</td>
+        <td>${item.model}</td>
+        <td>${item.prompt}</td>
+        <td>${new Date(item.time).toLocaleString()}</td>
+        <td><a href="/admin?block=${item.ip}">Block</a></td>
+      </tr>
+    `;
+  }
+
   return html(`
-  <html>
-  <head>
-    <title>Login • Wanz AI</title>
-    <style>
-      body { margin:0; font-family:Inter; background:#0d0d12; display:flex; justify-content:center; align-items:center; height:100vh; color:white; }
-      .box { width:380px; padding:35px; border-radius:15px; background:rgba(255,255,255,0.05); backdrop-filter:blur(12px); box-shadow:0 0 25px rgba(0,0,0,0.3); animation:fade 1s ease; }
-      input { width:100%; padding:12px; margin-top:10px; border-radius:10px; border:none; background:rgba(255,255,255,0.1); color:white; }
-      .btn { margin-top:20px; width:100%; padding:12px; background:#5865F2; border:none; color:white; font-weight:600; border-radius:10px; cursor:pointer; }
-      .btn:hover { background:#4754d8; }
-      @keyframes fade { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
-    </style>
-  </head>
-  <body>
-    <div class="box">
-      <h2>Login</h2>
-      <input id="email" placeholder="Email">
-      <input id="pass" type="password" placeholder="Password">
-      <button class="btn" onclick="login()">Login</button>
-      <p style="margin-top:15px;">Tidak punya akun? <a href="/register" style="color:#00c3ff;">Register</a></p>
-    </div>
-    <script>
-      async function login(){
-        let email = document.getElementById('email').value;
-        let password = document.getElementById('pass').value;
+    <h1>Admin Logs</h1>
+    <p>Only monitoring — no login.</p>
 
-        let r = await fetch('/api/login',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email,password})
-        });
-        let j = await r.json();
-
-        if(j.success){
-          localStorage.setItem('email', email);
-          location.href='/dashboard';
-        } else alert(j.error);
-      }
-    </script>
-  </body>
-  </html>
+    <table border="1" cellpadding="5">
+      <tr>
+        <th>IP</th><th>Model</th><th>Prompt</th><th>Time</th><th>Action</th>
+      </tr>
+      ${htmlRows}
+    </table>
   `);
 }
 
-function registerUI() {
-  return html(`
-  <html>
-  <head>
-    <title>Register • Wanz AI</title>
-    <style>
-      body { margin:0; font-family:Inter; background:#0d0d12; display:flex; justify-content:center; align-items:center; height:100vh; color:white; }
-      .box { width:380px; padding:35px; border-radius:15px; background:rgba(255,255,255,0.05); backdrop-filter:blur(12px); box-shadow:0 0 25px rgba(0,0,0,0.3); animation:fade 1s ease; }
-      input { width:100%; padding:12px; margin-top:10px; border-radius:10px; border:none; background:rgba(255,255,255,0.1); color:white; }
-      .btn { margin-top:20px; width:100%; padding:12px; background:#00c3ff; border:none; color:white; font-weight:600; border-radius:10px; cursor:pointer; }
-      .btn:hover { background:#00a3dd; }
-      @keyframes fade { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
-    </style>
-  </head>
-  <body>
-    <div class="box">
-      <h2>Register</h2>
-      <input id="email" placeholder="Email">
-      <input id="pass" type="password" placeholder="Password">
-      <button class="btn" onclick="regis()">Register</button>
-      <p style="margin-top:15px;">Sudah punya akun? <a href="/login" style="color:#5865F2;">Login</a></p>
-    </div>
-    <script>
-      async function regis(){
-        let email = document.getElementById('email').value;
-        let password = document.getElementById('pass').value;
+// =============================
+// BOT TELEGRAM ADMIN PANEL
+// =============================
+async function handleTelegram(req, env) {
+  const update = await req.json();
+  const msg = update.message;
 
-        let r = await fetch('/api/register',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email,password})
-        });
-        let j = await r.json();
+  if (!msg) return new Response("OK");
 
-        if(j.success){
-          alert("Akun dibuat! Silakan login");
-          location.href='/login';
-        } else alert(j.error);
-      }
-    </script>
-  </body>
-  </html>
-  `);
+  const chat = msg.chat.id;
+  const text = msg.text || "";
+
+  if (chat !== ADMIN_ID) {
+    return tgSend(chat, "❌ Kamu bukan admin.");
+  }
+
+  // Commands
+  if (text === "/start") {
+    return tgSend(chat, `
+ADMIN PANEL BOT
+
+/lastlog - Lihat 10 aktivitas terakhir
+/block <ip> - Blokir IP
+/unblock <ip> - Unblokir IP
+/reset - Hapus semua log
+    `);
+  }
+
+  if (text === "/lastlog") {
+    const logs = await env.KV_LOG.list({ prefix: "log:" });
+    const all = logs.keys.slice(-10);
+
+    let pack = "📌 *10 Aktivitas Terakhir:*\n\n";
+    for (const row of all) {
+      const item = JSON.parse(await env.KV_LOG.get(row.name));
+      pack += `• ${item.ip} | ${item.prompt.substring(0, 40)}...\n`;
+    }
+
+    return tgSend(chat, pack);
+  }
+
+  if (text.startsWith("/block ")) {
+    const ip = text.split(" ")[1];
+    await env.KV_BLOCK.put(ip, "blocked");
+    return tgSend(chat, `IP ${ip} diblokir.`);
+  }
+
+  if (text.startsWith("/unblock ")) {
+    const ip = text.split(" ")[1];
+    await env.KV_BLOCK.delete(ip);
+    return tgSend(chat, `IP ${ip} dihapus dari blocklist.`);
+  }
+
+  if (text === "/reset") {
+    const logs = await env.KV_LOG.list({ prefix: "log:" });
+    for (const l of logs.keys) await env.KV_LOG.delete(l.name);
+    return tgSend(chat, "Log berhasil dihapus.");
+  }
+
+  return tgSend(chat, "Perintah tidak dikenal.");
 }
 
-async function dashboardUI(req, env) {
-  const email = req.headers.get("X-Email") || "";
-
-  return html(`
-  <html>
-  <head>
-    <title>Dashboard • Wanz AI</title>
-    <style>
-      body { margin:0; font-family:Inter; background:#0a0a0f; color:white; }
-      .nav { padding:20px; background:#11121a; box-shadow:0 0 20px rgba(0,0,0,0.3); }
-      .container { padding:30px; animation:fade .8s ease; }
-      .card {
-        padding:20px; border-radius:15px;
-        background:rgba(255,255,255,0.05);
-        backdrop-filter:blur(10px);
-        box-shadow:0 0 20px rgba(0,0,0,0.3);
-        margin-bottom:20px;
-      }
-      .btn {
-        padding:10px 15px; background:#5865F2; border:none;
-        border-radius:10px; color:white; cursor:pointer; 
-        transition:.3s;
-      }
-      .btn:hover { background:#4654e0; transform:scale(1.03); }
-      @keyframes fade { from{opacity:0;transform:translateY(15px);} to{opacity:1;transform:translateY(0);} }
-    </style>
-  </head>
-  <body>
-    <div class="nav"><h2>Wanz AI Dashboard</h2></div>
-    <div class="container">
-      <div class="card">
-        <h3>Your API Key</h3>
-        <p id="key">Loading...</p>
-        <button class="btn" onclick="resetKey()">Reset Key</button>
-      </div>
-
-      <div class="card">
-        <h3>API Usage Today</h3>
-        <p id="usage">Loading...</p>
-      </div>
-
-      <div class="card">
-        <h3>Send AI Request</h3>
-        <textarea id="prompt" style="width:100%;height:80px;background:#0002;color:white;border-radius:10px;padding:10px;"></textarea>
-        <button class="btn" onclick="sendAI()">Send</button>
-        <pre id="result" style="margin-top:15px;white-space:pre-wrap"></pre>
-      </div>
-    </div>
-
-    <script>
-      async function loadMe(){
-        let email = localStorage.getItem("email");
-        let r = await fetch("/api/me",{headers:{ "X-Email":email }});
-        let j = await r.json();
-
-        document.getElementById("key").innerText = j.api_key;
-        document.getElementById("usage").innerText = 
-          j.used_today + " / " + j.limit_daily;
-      }
-
-      async function resetKey(){
-        let email = localStorage.getItem("email");
-        let r = await fetch("/api/reset-key",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({email})
-        });
-        let j = await r.json();
-        document.getElementById("key").innerText = j.api_key;
-      }
-
-      async function sendAI(){
-        let key = document.getElementById("key").innerText;
-        let prompt = document.getElementById("prompt").value;
-
-        let r = await fetch("/api/ai",{
-          method:"POST",
-          headers:{
-            "Content-Type":"application/json",
-            "Authorization":"Bearer "+key
-          },
-          body:JSON.stringify({ model:"llama-3.1-8b-instruct", prompt })
-        });
-
-        let j = await r.json();
-        document.getElementById("result").innerText = JSON.stringify(j,null,2);
-      }
-
-      loadMe();
-    </script>
-  </body>
-  </html>
-  `);
-}
-
-/* -------------------------------------------------------
-  JSON RESPONSE
-------------------------------------------------------- */
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
+// =============================
+// HELPERS
+// =============================
+function json(obj, code = 200) {
+  return new Response(JSON.stringify(obj), {
+    status: code,
     headers: { "Content-Type": "application/json" }
   });
 }
 
-/* -------------------------------------------------------
-  HTML RESPONSE
-------------------------------------------------------- */
-function html(content) {
-  return new Response(content, {
-    headers:{ "Content-Type":"text/html" }
+function html(body) {
+  return new Response(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px">${body}</body></html>`,
+    { headers: { "Content-Type": "text/html" } }
+  );
+}
+
+async function tgSend(chat_id, text) {
+  return fetch(`${BOT_API}/sendMessage`, {
+    method: "POST",
+    body: JSON.stringify({
+      chat_id,
+      text,
+      parse_mode: "Markdown"
+    })
   });
-}
-
-/* -------------------------------------------------------
-  BACKEND: Register
-------------------------------------------------------- */
-async function register(req, env) {
-  const { email, password } = await req.json();
-  const exists = await env.KV_USERS.get(`user:${email}`);
-  if (exists) return json({ error: "Email already registered" }, 400);
-
-  const api_key = "WANZ-" + crypto.randomUUID();
-
-  await env.KV_USERS.put(`user:${email}`, JSON.stringify({
-    email,
-    password,
-    api_key,
-    limit_daily: 1000
-  }));
-
-  await env.KV_USAGE.put(`usage:${api_key}`, JSON.stringify({
-    used_today: 0,
-    total_used: 0,
-    logs: []
-  }));
-
-  return json({ success: true });
-}
-
-/* -------------------------------------------------------
-  BACKEND: Login
-------------------------------------------------------- */
-async function login(req, env) {
-  const { email, password } = await req.json();
-  const userJSON = await env.KV_USERS.get(`user:${email}`);
-  if (!userJSON) return json({ error:"User not found" },404);
-
-  const user = JSON.parse(userJSON);
-  if (user.password !== password) return json({ error:"Wrong password" },401);
-
-  return json({ success:true });
-}
-
-/* -------------------------------------------------------
-  BACKEND: Reset Key
-------------------------------------------------------- */
-async function resetKey(req, env) {
-  const { email } = await req.json();
-  const userJSON = await env.KV_USERS.get(`user:${email}`);
-  if (!userJSON) return json({ error:"Not found" },404);
-
-  const user = JSON.parse(userJSON);
-  const newKey = "WANZ-" + crypto.randomUUID();
-  user.api_key = newKey;
-
-  await env.KV_USERS.put(`user:${email}`, JSON.stringify(user));
-  await env.KV_USAGE.put(`usage:${newKey}`, JSON.stringify({
-    used_today:0, total_used:0, logs:[]
-  }));
-
-  return json({ success:true, api_key:newKey });
-}
-
-/* -------------------------------------------------------
-  BACKEND: Get Profile
-------------------------------------------------------- */
-async function me(req, env) {
-  const email = req.headers.get("X-Email");
-  const userJSON = await env.KV_USERS.get(`user:${email}`);
-  const user = JSON.parse(userJSON);
-
-  const usageJSON = await env.KV_USAGE.get(`usage:${user.api_key}`);
-  const usage = JSON.parse(usageJSON);
-
-  return json({
-    email,
-    api_key:user.api_key,
-    limit_daily:user.limit_daily,
-    used_today:usage.used_today,
-    total_used:usage.total_used,
-    logs:usage.logs
-  });
-}
-
-/* -------------------------------------------------------
-  BACKEND: AI Handler
-------------------------------------------------------- */
-async function aiHandler(req, env) {
-  const apiKey = req.headers.get("Authorization")?.replace("Bearer ","");
-  if (!apiKey) return json({ error:"Missing API key" },400);
-
-  let user;
-  const all = await env.KV_USERS.list({ prefix:"user:" });
-
-  for (const u of all.keys) {
-    const data = JSON.parse(await env.KV_USERS.get(u.name));
-    if (data.api_key === apiKey) user = data;
-  }
-
-  if (!user) return json({ error:"Invalid API key" },403);
-
-  const usageJSON = await env.KV_USAGE.get(`usage:${apiKey}`);
-  const usage = JSON.parse(usageJSON);
-
-  if (usage.used_today >= user.limit_daily)
-    return json({ error:"Limit reached" },429);
-
-  const { model, prompt } = await req.json();
-
-  const ai = new Ai(env.AI);
-  const result = await ai.run(model || "llama-3.1-8b-instruct", { prompt });
-
-  usage.used_today++;
-  usage.total_used++;
-  usage.logs.push({ t:Date.now(), model, tokens:result.usage?.total_tokens });
-
-  await env.KV_USAGE.put(`usage:${apiKey}`, JSON.stringify(usage));
-
-  return json(result);
 }
