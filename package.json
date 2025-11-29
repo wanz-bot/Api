@@ -1,7 +1,7 @@
 {
   "name": "wanz-ai",
   "version": "1.0.0",
-  "main": "api/worker.js",
+  "main": "api/index.html",
   "scripts": {
     "deploy": "wrangler deploy"
   },
