@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wanz AI Dashboard</title>
+  <script src="dashboard.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3/dist/tailwind.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen flex justify-center items-center">
+  <div class="w-full max-w-mdbg-gray-800 rounded-2xl p-6 shadow-xl animate-fade-in">
+    <h1 class="text-3xl font-bold mb-5 text-center">Wanz AI Dashboard</h1>
+
+    <div id="info" class="space-y-3">
+      <p><b>Email:</b> <span id="email"></span></p>
+      <p><b>API Key:</b> <code id="apiKey"></code></p>
+      <p><b>Limit:</b> <span id="limit"></span></p>
+      <p><b>Used Today:</b> <span id="today"></span></p>
+      <p><b>Total Used:</b> <span id="total"></span></p>
+    </div>
+
+    <button onclick="resetKey()" class="w-full mt-5 bg-red-600 p-3 rounded-xl">
+      Reset API Key
+    </button>
+  </div>
+</body>
+</html>
