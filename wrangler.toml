@@ -12,3 +12,6 @@ id = "8e4b1c7b5ac343e288fcda9c80427416"
 
 [ai]
 binding = "AI"
+
+[vars]
+ADMIN_PASS = "wanz"
