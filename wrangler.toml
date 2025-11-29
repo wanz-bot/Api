@@ -2,16 +2,6 @@ name = "wanz-ai"
 main = "api/worker.js"
 compatibility_date = "2024-01-01"
 
-[[kv_namespaces]]
-binding = "KV_LOG"
-id = "99ab5b6265264aaab65066d458b59306"
-
-[[kv_namespaces]]
-binding = "KV_BLOCK"
-id = "8e4b1c7b5ac343e288fcda9c80427416"
-
 [ai]
 binding = "AI"
 
-[vars]
-ADMIN_PASS = "wanz"
