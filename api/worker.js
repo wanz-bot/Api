@@ -1,30 +1,15 @@
-export default {
-    async fetch(req, env) {
-        const url = new URL(req.url);
+function json(obj, code = 200) {
+    return new Response(JSON.stringify(obj), {
+        status: code,
+        headers: { "Content-Type": "application/json" }
+    });
+}
 
-        // ROUTES
-        if (url.pathname === "/") return docPage();
-        if (url.pathname === "/api") return handleAPI(req, env);
-
-        return new Response("Not Found", { status: 404 });
-    }
-};
-
-// =================================================
-// API ENDPOINT – CLEAN, TANPA KV
-// =================================================
-async function handleAPI(req, env) {
-    const body = await req.json().catch(() => null);
-    if (!body || !body.prompt) {
-        return json({ error: "Missing prompt" }, 400);
-    }
-
-    const model = body.model || "llama-3.1-8b-instruct";
-
-    const ai = new Ai(env.AI);
-    const result = await ai.run(model, { prompt: body.prompt });
-
-    return json(result);
+function html(content) {
+    return new Response(
+        `<!DOCTYPE html><html><body>${content}</body></html>`,
+        { headers: { "Content-Type": "text/html" } }
+    );
 }
 
 // =================================================
@@ -162,18 +147,61 @@ curl -X POST https://domain/api \\
 }
 
 // =================================================
-// HELPERS
+// API ENDPOINT – CLEAN, TANPA KV
 // =================================================
-function json(obj, code = 200) {
-    return new Response(JSON.stringify(obj), {
-        status: code,
-        headers: { "Content-Type": "application/json" }
-    });
+async function handleAPI(req, env) {
+    // Pastikan request adalah POST
+    if (req.method !== "POST") {
+        return json({ error: "Method Not Allowed" }, 405);
+    }
+
+    let body;
+    try {
+        body = await req.json();
+    } catch (e) {
+        // Jika gagal parsing JSON, kembalikan error
+        return json({ error: "Invalid JSON in request body" }, 400);
+    }
+
+    if (!body || !body.prompt) {
+        return json({ error: "Missing prompt" }, 400);
+    }
+
+    const model = body.model || "@cf/meta/llama-3.1-8b-instruct"; // Menggunakan Ai.run() dengan model yang benar
+
+    // Inisialisasi Ai dari env.AI
+    const ai = new Ai(env.AI);
+    
+    // Format input untuk Ai.run()
+    const messages = [
+        { role: "user", content: body.prompt }
+    ];
+
+    try {
+        const result = await ai.run(model, { messages });
+
+        // Ai.run() untuk model chat mengembalikan objek dengan properti 'response'
+        return json({
+            response: result.response,
+            model: model
+        });
+    } catch (e) {
+        console.error("AI Run Error:", e);
+        return json({ error: "Internal Server Error during AI execution", details: e.message }, 500);
+    }
 }
 
-function html(content) {
-    return new Response(
-        `<!DOCTYPE html><html><body>${content}</body></html>`,
-        { headers: { "Content-Type": "text/html" } }
-    );
-}
+// =================================================
+// MAIN EXPORT
+// =================================================
+export default {
+    async fetch(req, env) {
+        const url = new URL(req.url);
+
+        // ROUTES
+        if (url.pathname === "/") return docPage();
+        if (url.pathname === "/api") return handleAPI(req, env);
+
+        return new Response("Not Found", { status: 404 });
+    }
+};
